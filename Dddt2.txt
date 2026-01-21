@@ -1,0 +1,39 @@
+Sub ProcessCadnums()
+    'Обработка списка кадастровых номеров
+    'Кадастровые номера в столбце A, адреса запишутся в столбец B
+    
+    Dim ws As Worksheet
+    Dim iRow As Long, iLastRow As Long
+    Dim sCadNum As String, sAddress As String
+    
+    Set ws = ActiveSheet
+    iLastRow = ws.Cells(ws.Rows.Count, 1).End(xlUp).Row
+    
+    Application.ScreenUpdating = False
+    Application.StatusBar = "Обработка кадастровых номеров..."
+    
+    For iRow = 2 To iLastRow 'начинаем со 2-й строки, если в 1-й заголовок
+        sCadNum = Trim(ws.Cells(iRow, 1).Value)
+        
+        If sCadNum <> "" Then
+            sAddress = GetAddressByCadnum(sCadNum)
+            ws.Cells(iRow, 2).Value = sAddress
+            
+            'Опционально: координаты в столбцы C и D
+            ws.Cells(iRow, 3).Value = GetCadnumDetails(sCadNum, "geo_lat")
+            ws.Cells(iRow, 4).Value = GetCadnumDetails(sCadNum, "geo_lon")
+            
+            'Пауза 0.1 сек для соблюдения лимитов API (30 запросов/сек)
+            Application.Wait Now + TimeSerial(0, 0, 0.1)
+            
+            Application.StatusBar = "Обработано: " & iRow - 1 & " из " & iLastRow - 1
+        End If
+    Next iRow
+    
+    Application.StatusBar = "Данные успешно загружены."
+    Application.ScreenUpdating = True
+    
+    MsgBox "Обработка завершена!", vbInformation
+End Sub
+
+ 
