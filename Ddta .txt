@@ -1,0 +1,119 @@
+'*************************************************
+'Разработка: получение адреса по кадастровому номеру
+'API DaData: https://dadata.ru/api/find-address/
+'*************************************************
+
+Option Explicit
+Option Private Module
+
+Public apiKeyDaData As String
+
+' Функция получения адреса по кадастровому номеру
+Function GetAddressByCadastre(ByVal sCadNum As String) As String
+    Dim sURL As String, sApiKey As String
+    Dim objHTTP As Object, sResponse As String
+    Dim sBody As String
+    
+    On Error Resume Next
+    
+    ' URL для API DaData
+    sURL = "https://suggestions.dadata.ru/suggestions/api/4_1/rs/findById/address"
+    
+    ' API ключ (задайте свой ключ)
+    sApiKey = apiKeyDaData
+    
+    ' Формируем тело запроса в формате JSON
+    sBody = "{""query"": """ & sCadNum & """}"
+    
+    ' Создаём объект для HTTP запроса
+    Set objHTTP = CreateObject("MSXML2.ServerXMLHTTP.6.0")
+    
+    With objHTTP
+        .Open "POST", sURL, False
+        .setRequestHeader "Content-Type", "application/json"
+        .setRequestHeader "Accept", "application/json"
+        .setRequestHeader "Authorization", "Token " & sApiKey
+        .send sBody
+        
+        If .Status = 200 Then
+            sResponse = .responseText
+            ' Парсим JSON ответ
+            GetAddressByCadastre = ParseDaDataResponse(sResponse)
+        Else
+            GetAddressByCadastre = "Ошибка: " & .Status
+        End If
+    End With
+    
+    Set objHTTP = Nothing
+End Function
+
+' Функция парсинга JSON ответа от DaData
+Function ParseDaDataResponse(ByVal sJSON As String) As String
+    Dim lPos1 As Long, lPos2 As Long
+    Dim sAddress As String
+    
+    On Error Resume Next
+    
+    ' Ищем поле "unrestricted_value" (полный адрес с индексом)
+    lPos1 = InStr(sJSON, """unrestricted_value"":""")
+    
+    If lPos1 > 0 Then
+        lPos1 = lPos1 + Len("""unrestricted_value"":""")
+        lPos2 = InStr(lPos1, sJSON, """")
+        sAddress = Mid(sJSON, lPos1, lPos2 - lPos1)
+    Else
+        ' Если не найден, ищем просто "value"
+        lPos1 = InStr(sJSON, """value"":""")
+        If lPos1 > 0 Then
+            lPos1 = lPos1 + Len("""value"":""")
+            lPos2 = InStr(lPos1, sJSON, """")
+            sAddress = Mid(sJSON, lPos1, lPos2 - lPos1)
+        Else
+            sAddress = "Адрес не найден"
+        End If
+    End If
+    
+    ParseDaDataResponse = sAddress
+End Function
+
+' Макрос для массовой обработки кадастровых номеров
+Sub ProcessCadastreNumbers()
+    Dim shName As String
+    Dim iRow As Long, iLastRow As Long
+    Dim sCadNum As String, sAddress As String
+    
+    Application.ScreenUpdating = False
+    Application.StatusBar = False
+    
+    shName = ActiveSheet.Name
+    
+    ' Устанавливаем API ключ
+    apiKeyDaData = Sheets("Настройки").Cells(2, 2).Value
+    
+    With Sheets(shName)
+        ' Определяем последнюю строку с данными
+        iLastRow = .UsedRange.Rows.Count + .UsedRange.Row - 1
+        
+        ' Очищаем предыдущие результаты
+        .Range(.Cells(2, 2), .Cells(iLastRow, 2)).ClearContents
+        
+        ' Обрабатываем каждый кадастровый номер
+        For iRow = 2 To iLastRow
+            sCadNum = .Cells(iRow, 1).Value
+            
+            If sCadNum <> "" Then
+                sAddress = GetAddressByCadastre(sCadNum)
+                .Cells(iRow, 2).Value = sAddress
+                
+                ' Обновляем статус-бар
+                Application.StatusBar = "Обработано строк: " & iRow - 1 & " из " & iLastRow - 1
+                Application.Wait Now + TimeSerial(0, 0, 0.5) ' пауза 0.5 сек.
+            End If
+        Next iRow
+    End With
+    
+    Application.StatusBar = False
+    Application.ScreenUpdating = True
+    
+    MsgBox "Данные успешно загружены.", vbInformation
+End Sub
